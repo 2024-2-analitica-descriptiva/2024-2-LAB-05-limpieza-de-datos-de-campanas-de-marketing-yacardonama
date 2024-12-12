@@ -4,6 +4,8 @@ Escriba el codigo que ejecute la accion solicitada.
 
 # pylint: disable=import-outside-toplevel
 
+import pandas as pd
+import os
 
 def clean_campaign_data():
     """
@@ -49,9 +51,52 @@ def clean_campaign_data():
 
 
     """
+    input_folder = "./files/input/"
 
-    return
+    dataframes = []
 
+    # Iterar sobre todos los archivos en la carpeta
+    for filename in os.listdir(input_folder):
+        if filename.endswith(".zip"):
+            filepath = os.path.join(input_folder, filename)
+            df = pd.read_csv(
+                filepath,
+                index_col=False,
+                compression="zip"
+            )
+            dataframes.append(df)
+    df_completo = pd.concat(dataframes, ignore_index=True)
 
-if __name__ == "__main__":
-    clean_campaign_data()
+    df_client = df_completo[['client_id', 'age', 'job', 'marital', 'education', 'credit_default', 'mortgage']]
+    #Falta 'last_contact_date'
+    df_campaign = df_completo[['client_id', 'number_contacts','contact_duration', 'previous_campaign_contacts', 'previous_outcome', 'campaign_outcome', 'month', 'day']]
+    df_economics = df_completo[['client_id', 'cons_price_idx', 'euribor_three_months']]
+
+    df_campaign.iloc[:, 4] = (df_campaign.iloc[:, 4] == 'success').astype(int)
+    df_campaign.iloc[:, 5] = (df_campaign.iloc[:, 5] == 'yes').astype(int)
+    # Diccionario para mapear las abreviaturas a números
+    meses_dict = {'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06', 
+                'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'}
+    df_campaign.iloc[:, 6] = df_campaign.iloc[:, 6].map(meses_dict)    
+    df_campaign['last_contact_date'] = pd.to_datetime({'year': 2022, 'month': df_campaign['month'], 'day': df_campaign['day']})
+    df_campaign.drop(['month', 'day'], axis=1, inplace=True)
+
+    df_client.iloc[:, 2] = df_client.iloc[:, 2].str.replace('.', '').str.replace('-', '_')
+    df_client.iloc[:, 4] = df_client.iloc[:, 4].str.replace('.', '_').replace('unknown', pd.NA)
+    df_client.iloc[:, 5] = (df_client.iloc[:, 5] == 'yes').astype(int)
+    df_client.iloc[:, 6] = (df_client.iloc[:, 6] == 'yes').astype(int)
+
+    dataframes = [
+        (df_client, 'client.csv'),
+        (df_campaign, 'campaign.csv'),
+        (df_economics, 'economics.csv')
+    ]
+
+    output_dir = './files/output/'
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for df, filename in dataframes:
+        filepath = os.path.join(output_dir, filename)
+        df.to_csv(filepath, index=False)
+
